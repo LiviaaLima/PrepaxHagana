@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prepax Hagana - Calculadora de VT</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="topbar">
+        <h1>Sistema Prepax</h1>
+    </header>
+
+    <main class="container">
+        <section class="card form-section">
+            <h2>Dados da Escala</h2>
+            <form id="prepax-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="data-inicio">Data de Início (DI)</label>
+                        <input type="date" id="data-inicio" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="data-fechamento">Data de Fechamento (DF)</label>
+                        <input type="date" id="data-fechamento" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="escala">Escala</label>
+                        <select id="escala">
+                            <option value="12x36">12x36</option>
+                            <option value="5x1">5x1</option>
+                            <option value="6x1">6x1</option>
+                            <option value="5x2">5x2</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Período</label>
+                        <div class="radio-group">
+                            <label><input type="radio" name="periodo" value="diurno" checked> Diurno</label>
+                            <label><input type="radio" name="periodo" value="noturno"> Noturno</label>
+                        </div>
+                    </div>
+                </div>
+
+                <hr>
+
+                <h2>Passagens</h2>
+                <div id="passagens-container"></div>
+                <button type="button" id="btn-add-passagem" class="btn btn-secondary">+ Adicionar passagem</button>
+            </form>
+        </section>
+
+        <section class="card result-section">
+            <h2>Resumo do Cálculo</h2>
+            <div id="resultado-rapido" class="resultado-grid">
+                <div class="res-box">
+                    <span>Dias Trabalhados</span>
+                    <strong id="res-dias">0</strong>
+                </div>
+                <div class="res-box">
+                    <span>Domingos</span>
+                    <strong id="res-domingos">0</strong>
+                </div>
+                <div class="res-box highlight">
+                    <span>VT Final</span>
+                    <strong id="res-vt">R$ 0,00</strong>
+                </div>
+            </div>
+
+            <div class="explicacao">
+                <h3>Como este valor foi calculado</h3>
+                <div id="log-calculo" class="log-content">
+                    Preencha os dados para visualizar o cálculo detalhado.
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
