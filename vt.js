@@ -1,36 +1,49 @@
 import { formatCurrency } from './utils.js';
 
-export function calcularVT(dias, domingos, passagens, periodo) {
+export function calcularVT(dias, domingos, passagens, periodo, vtEmEspecie = null) {
     let valorIda = 0;
     let valorIdaEVolta = 0;
     let custoDomingo = 0; 
     let logLines = [];
+    let vtFinal = 0;
+    const diasSemDomingo = dias - domingos;
 
+    // --- SE FOR DETECTADO VT EM ESPÉCIE/DINHEIRO NA PLANILHA ---
+    if (vtEmEspecie && vtEmEspecie > 0) {
+        vtFinal = vtEmEspecie * dias;
+        return {
+            valorIda: vtEmEspecie / 2,
+            valorIdaEVolta: vtEmEspecie,
+            custoDomingo: vtEmEspecie,
+            vtFinal,
+            logLines: [`- Regulamento de Planilha: VT em Espécie/Dinheiro fixado em ${formatCurrency(vtEmEspecie)} por dia trabalhado.`],
+            diasSemDomingo: dias
+        };
+    }
+
+    // --- CÁLCULO PADRÃO (CARTÕES / BILHETES) ---
     passagens.forEach(p => {
         valorIda += p.valor;
         const idaVolta = p.valor * 2;
         valorIdaEVolta += idaVolta;
 
-        let valorDiaDomingo = idaVolta; // Custo base do domingo se não houvesse desconto
+        let valorDiaDomingo = idaVolta;
 
         if (p.tipo === 'integracao') {
-            // Regra da integração: 9.38 - Metrô (5.40) = Ônibus (3.98)
             const valorMetro = 5.40;
             if (periodo === 'diurno') {
-                valorDiaDomingo = valorMetro * 2; // Desconta ônibus ida e volta
+                valorDiaDomingo = valorMetro * 2;
                 logLines.push(`- Integração: Ônibus ida e volta descontados. Metrô mantido (${formatCurrency(valorDiaDomingo)}/domingo).`);
             } else {
-                // Noturno: Desconta apenas a ida do ônibus no domingo. 
-                // Ida domingo = Metrô (5.40) | Volta segunda = Integração cheia (9.38)
                 valorDiaDomingo = valorMetro + p.valor;
                 logLines.push(`- Integração (Noturno): Desconto apenas da ida do ônibus no domingo (${formatCurrency(valorDiaDomingo)}/domingo).`);
             }
         } else if (p.descontoDomingo) {
             if (periodo === 'diurno') {
-                valorDiaDomingo = 0; // Ônibus SP grátis
+                valorDiaDomingo = 0;
                 logLines.push(`- ${p.nome}: Desconto integral no domingo (${formatCurrency(valorDiaDomingo)}).`);
             } else {
-                valorDiaDomingo = p.valor; // Noturno: Paga só a volta na segunda
+                valorDiaDomingo = p.valor;
                 logLines.push(`- ${p.nome} (Noturno): Desconto apenas na ida do domingo (${formatCurrency(valorDiaDomingo)}/domingo).`);
             }
         } else {
@@ -40,10 +53,9 @@ export function calcularVT(dias, domingos, passagens, periodo) {
         custoDomingo += valorDiaDomingo;
     });
 
-    const diasSemDomingo = dias - domingos;
     const custoDiasNormais = valorIdaEVolta * diasSemDomingo;
     const custoTotalDomingos = custoDomingo * domingos;
-    const vtFinal = custoDiasNormais + custoTotalDomingos;
+    vtFinal = custoDiasNormais + custoTotalDomingos;
 
     return {
         valorIda,
