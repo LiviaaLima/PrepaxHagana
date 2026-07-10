@@ -10,10 +10,10 @@ export function processarArquivoExcel(file, callback) {
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         
-        // Converte as linhas da planilha mapeando as colunas
+        // Carrega o Excel como Array de Objetos brutos
         dadosPlanilha = XLSX.utils.sheet_to_json(worksheet);
         
-        console.log("Planilha carregada com sucesso! Total de registros:", dadosPlanilha.length);
+        console.log("Planilha carregada! Total de linhas encontradas:", dadosPlanilha.length);
         if (callback) callback();
     };
     
@@ -23,19 +23,25 @@ export function processarArquivoExcel(file, callback) {
 export function buscarParticularidadesPosto(codigoPosto) {
     if (!codigoPosto || dadosPlanilha.length === 0) return null;
     
-    // Varre a planilha comparando o código da coluna POSTO
+    const postoBuscado = String(codigoPosto).trim();
+
+    // Faz a varredura linha por linha na planilha carregada
     return dadosPlanilha.find(linha => {
-        const postoPlanilha = String(linha.POSTO || linha['Posto'] || '').trim();
-        return postoPlanilha === String(codigoPosto).trim();
+        // Encontra a chave da coluna ignorando espaços extras (ex: 'POSTO ', 'Posto', etc)
+        const chavePosto = Object.keys(linha).find(k => k.trim().toUpperCase() === 'POSTO');
+        if (!chavePosto) return false;
+
+        const valorPostoPlanilha = String(linha[chavePosto] || '').trim();
+        return valorPostoPlanilha === postoBuscado;
     });
 }
 
-// Extrai números de strings como "VT R$ 18,50" ou "VR R$ 40,12"
 export function extrairValorDoTexto(texto, chave) {
     if (!texto) return null;
     const textoUpper = texto.toUpperCase();
     if (!textoUpper.includes(chave)) return null;
     
+    // Procura por números após a palavra chave (Ex: VT R$ 18,50 ou VT 18.50)
     const regex = new RegExp(chave + '\\s*(?:R\\$\\s*)?([0-9.,]+)', 'i');
     const match = textoUpper.match(regex);
     
