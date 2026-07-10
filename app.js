@@ -3,6 +3,8 @@ import { calcularDiasEDomingos } from './escalas.js';
 import { identificarTransporte } from './transportes.js';
 import { calcularVT } from './vt.js';
 import { createPassagemCard } from './ui.js';
+// Importando o novo módulo do excel
+import { processarArquivoExcel, buscarParticularidadesPosto, extrairValorDoTexto } from './excel.js';
 
 let passagemCount = 0;
 
@@ -16,6 +18,10 @@ const dom = {
     resDias: document.getElementById('res-dias'),
     resDomingos: document.getElementById('res-domingos'),
     resVt: document.getElementById('res-vt'),
+    resVr: document.getElementById('res-vr'),
+    alertaParticularidade: document.getElementById('alerta-particularidade'),
+    codigoPosto: document.getElementById('codigo-posto'),
+    uploadExcel: document.getElementById('upload-excel'),
     logCalculo: document.getElementById('log-calculo')
 };
 
@@ -47,54 +53,92 @@ function getPassagensAtuais() {
     return passagens;
 }
 
-function renderLog(dias, domingos, escala, periodo, vtData, passagens) {
-    if (dias === 0) {
-        dom.logCalculo.textContent = "Selecione um intervalo de datas válido para iniciar o cálculo.";
-        return;
-    }
-
-    let passagensLog = passagens.map(p => `${p.nome}: ${formatCurrency(p.valor)}`).join('\n  ');
-
-    let log = `Escala: ${escala}\nPeríodo: ${periodo === 'diurno' ? 'Diurno' : 'Noturno'}\n\n`;
-    log += `Dias totais trabalhados: ${dias}\nDomingos trabalhados: ${domingos}\nDias normais (sem domingo): ${vtData.diasSemDomingo}\n\n`;
-    log += `Passagens Registradas:\n  ${passagensLog || 'Nenhuma'}\n\n`;
-    log += `Valor diário (Ida): ${formatCurrency(vtData.valorIda)}\n`;
-    log += `Valor diário (Ida e Volta): ${formatCurrency(vtData.valorIdaEVolta)}\n\n`;
-    
-    if (domingos > 0 && passagens.length > 0) {
-        log += `Análise de Domingos:\n`;
-        log += vtData.logLines.join('\n') + '\n';
-        log += `Custo total de 1 domingo: ${formatCurrency(vtData.custoDomingo)}\n\n`;
-    }
-
-    log += `Cálculo Matemático:\n`;
-    log += `(${formatCurrency(vtData.valorIdaEVolta)} × ${vtData.diasSemDomingo} dias normais) + `;
-    log += `(${formatCurrency(vtData.custoDomingo)} × ${domingos} domingos)\n`;
-    log += `Total = ${formatCurrency(vtData.vtFinal)}`;
-
-    dom.logCalculo.textContent = log;
-}
-
 function updateApp() {
     const di = parseDateLocal(dom.dataInicio.value);
-    const df = parseDateLocal(dom.dataFechamento.value);
+    let df = parseDateLocal(dom.dataFechamento.value); // Alterado para 'let' para permitir reajuste de data
     const escala = dom.escala.value;
     const periodo = getPeriodo();
+    const codigoPosto = dom.codigoPosto ? dom.codigoPosto.value : '';
 
+    // Limpa alertas visuais anteriores
+    dom.alertaParticularidade.style.display = 'none';
+    dom.alertaParticularidade.textContent = '';
+
+    // Valores padrão de VR (Caso não encontre particularidade)
+    let valorDiarioVR = 124.92 / 6; 
+    let vtFixoEspecie = null;
+    let ehVtMensalEmEspecie = false;
+
+    // 1. VERIFICAR SE O POSTO CONSTA NA PLANILHA
+    const registroPosto = buscarParticularidadesPosto(codigoPosto);
+    if (registroPosto) {
+        const textoObs = registroPosto.PARTICULARIDADES || '';
+        const nomeCliente = registroPosto.CLIENTE || '';
+        
+        // Exibe o texto cru da planilha no card amarelo de alerta
+        dom.alertaParticularidade.innerHTML = `<strong>Posto ${codigoPosto} - ${nomeCliente}:</strong> ${textoObs}`;
+        dom.alertaParticularidade.style.display = 'block';
+
+        // Tenta capturar valor do VR (Ex: "VR R$ 40,12")
+        const vrExtraido = extrairValorDoTexto(textoObs, "VR");
+        if (vrExtraido) valorDiarioVR = vrExtraido;
+
+        // Tenta capturar valor do VT em dinheiro (Ex: "VT R$ 18,50")
+        const vtExtraido = extrairValorDoTexto(textoObs, "VT");
+        if (vtExtraido) {
+            vtFixoEspecie = vtExtraido;
+            ehVtMensalEmEspecie = true;
+        }
+    }
+
+    // --- REGRA DE CORTE DO DIA 5 (MENSAL EM ESPÉCIE) ---
+    if (ehVtMensalEmEspecie && di) {
+        df = new Date(di.getFullYear(), di.getMonth(), 5);
+        // Se a data de início inserida for depois do dia 5, o corte vai para o dia 5 do mês seguinte
+        if (di > df) {
+            df = new Date(di.getFullYear(), di.getMonth() + 1, 5);
+        }
+    }
+
+    // Executa a contagem de dias (usando a data final reajustada ou a padrão)
     const { diasTrabalhados, domingos } = calcularDiasEDomingos(di, df, escala);
     const passagens = getPassagensAtuais();
 
     dom.resDias.textContent = diasTrabalhados;
     dom.resDomingos.textContent = domingos;
 
-    if (diasTrabalhados > 0 && passagens.length > 0) {
-        const vtData = calcularVT(diasTrabalhados, domingos, passagens, periodo);
+    // 2. EXIBIR VALOR DO VR (Fixo de 6 dias base)
+    const vrFinal = valorDiarioVR * 6;
+    dom.resVr.textContent = formatCurrency(vrFinal);
+
+    // 3. EXIBIR VALOR DO VT
+    if (diasTrabalhados > 0 && (passagens.length > 0 || vtFixoEspecie)) {
+        const vtData = calcularVT(diasTrabalhados, domingos, passagens, periodo, vtFixoEspecie);
         dom.resVt.textContent = formatCurrency(vtData.vtFinal);
-        renderLog(diasTrabalhados, domingos, escala, periodo, vtData, passagens);
+        renderLog(diasTrabalhados, domingos, escala, periodo, vtData, passagens, df);
     } else {
         dom.resVt.textContent = 'R$ 0,00';
-        renderLog(diasTrabalhados, domingos, escala, periodo, { valorIda:0, valorIdaEVolta:0, custoDomingo:0, vtFinal:0, logLines:[], diasSemDomingo:0 }, passagens);
+        renderLog(diasTrabalhados, domingos, escala, periodo, { valorIda:0, valorIdaEVolta:0, custoDomingo:0, vtFinal:0, logLines:[], diasSemDomingo:0 }, passagens, df);
     }
+}
+
+function renderLog(dias, domingos, escala, periodo, vtData, passagens, dataFechamentoUtilizada) {
+    if (dias === 0) {
+        dom.logCalculo.textContent = "Selecione um intervalo de datas válido para iniciar o cálculo.";
+        return;
+    }
+
+    const dfFormatada = dataFechamentoUtilizada ? dataFechamentoUtilizada.toLocaleDateString('pt-BR') : '';
+    let passagensLog = passagens.map(p => `${p.nome}: ${formatCurrency(p.valor)}`).join('\n  ');
+
+    let log = `Escala: ${escala} | Período: ${periodo === 'diurno' ? 'Diurno' : 'Noturno'}\n`;
+    log += `Corte considerado no cálculo: ${dfFormatada}\n`;
+    log += `Dias calculados: ${dias} (Domingos: ${domingos})\n\n`;
+    log += `Cálculo de VT:\n`;
+    if (vtData.logLines.length > 0) log += vtData.logLines.join('\n') + '\n';
+    log += `Total VT = ${formatCurrency(vtData.vtFinal)}`;
+
+    dom.logCalculo.textContent = log;
 }
 
 function addPassagem() {
@@ -103,12 +147,19 @@ function addPassagem() {
     dom.passagensContainer.appendChild(card);
 }
 
-// Event Listeners
+// Vinculando eventos
 dom.dataInicio.addEventListener('change', updateApp);
 dom.dataFechamento.addEventListener('change', updateApp);
 dom.escala.addEventListener('change', updateApp);
 dom.radiosPeriodo.forEach(r => r.addEventListener('change', updateApp));
 dom.btnAddPassagem.addEventListener('click', addPassagem);
 
-// Init com 1 passagem
+if(dom.uploadExcel) {
+    dom.uploadExcel.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) processarArquivoExcel(e.target.files[0], updateApp);
+    });
+}
+if(dom.codigoPosto) dom.codigoPosto.addEventListener('input', updateApp);
+
+// Inicializa a primeira caixinha de passagens vazia
 addPassagem();
