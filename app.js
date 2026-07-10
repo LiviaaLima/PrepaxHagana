@@ -3,7 +3,6 @@ import { calcularDiasEDomingos } from './escalas.js';
 import { identificarTransporte } from './transportes.js';
 import { calcularVT } from './vt.js';
 import { createPassagemCard } from './ui.js';
-// Importando o novo módulo do excel
 import { processarArquivoExcel, buscarParticularidadesPosto, extrairValorDoTexto } from './excel.js';
 
 let passagemCount = 0;
@@ -18,7 +17,6 @@ const dom = {
     resDias: document.getElementById('res-dias'),
     resDomingos: document.getElementById('res-domingos'),
     resVt: document.getElementById('res-vt'),
-    resVr: document.getElementById('res-vr'),
     alertaParticularidade: document.getElementById('alerta-particularidade'),
     codigoPosto: document.getElementById('codigo-posto'),
     uploadExcel: document.getElementById('upload-excel'),
@@ -55,63 +53,57 @@ function getPassagensAtuais() {
 
 function updateApp() {
     const di = parseDateLocal(dom.dataInicio.value);
-    let df = parseDateLocal(dom.dataFechamento.value); // Alterado para 'let' para permitir reajuste de data
+    let df = parseDateLocal(dom.dataFechamento.value);
     const escala = dom.escala.value;
     const periodo = getPeriodo();
     const codigoPosto = dom.codigoPosto ? dom.codigoPosto.value : '';
 
-    // Limpa alertas visuais anteriores
+    // Esconde o card de alerta por padrão
     dom.alertaParticularidade.style.display = 'none';
     dom.alertaParticularidade.textContent = '';
 
-    // Valores padrão de VR (Caso não encontre particularidade)
-    let valorDiarioVR = 124.92 / 6; 
     let vtFixoEspecie = null;
     let ehVtMensalEmEspecie = false;
 
-    // 1. VERIFICAR SE O POSTO CONSTA NA PLANILHA
+    // 1. CONFERIR PLANILHA
     const registroPosto = buscarParticularidadesPosto(codigoPosto);
     if (registroPosto) {
-        const textoObs = registroPosto.PARTICULARIDADES || '';
-        const nomeCliente = registroPosto.CLIENTE || '';
+        // Encontra as chaves corretas ignorando espaços extras nas colunas
+        const chaveParticularidades = Object.keys(registroPosto).find(k => k.trim().toUpperCase() === 'PARTICULARIDADES');
+        const chaveCliente = Object.keys(registroPosto).find(k => k.trim().toUpperCase() === 'CLIENTE');
+
+        const textoObs = chaveParticularidades ? (registroPosto[chaveParticularidades] || '') : '';
+        const nomeCliente = chaveCliente ? (registroPosto[chaveCliente] || '') : '';
         
-        // Exibe o texto cru da planilha no card amarelo de alerta
-        dom.alertaParticularidade.innerHTML = `<strong>Posto ${codigoPosto} - ${nomeCliente}:</strong> ${textoObs}`;
-        dom.alertaParticularidade.style.display = 'block';
+        if (textoObs) {
+            // MOSTRA O ALERTA NA TELA COM O TEXTO EXATO DA PLANILHA
+            dom.alertaParticularidade.innerHTML = `<strong>Posto ${codigoPosto} - ${nomeCliente}:</strong> ${textoObs}`;
+            dom.alertaParticularidade.style.display = 'block';
 
-        // Tenta capturar valor do VR (Ex: "VR R$ 40,12")
-        const vrExtraido = extrairValorDoTexto(textoObs, "VR");
-        if (vrExtraido) valorDiarioVR = vrExtraido;
-
-        // Tenta capturar valor do VT em dinheiro (Ex: "VT R$ 18,50")
-        const vtExtraido = extrairValorDoTexto(textoObs, "VT");
-        if (vtExtraido) {
-            vtFixoEspecie = vtExtraido;
-            ehVtMensalEmEspecie = true;
+            // Tenta identificar se o texto fala sobre "VT R$" em dinheiro
+            const vtExtraido = extrairValorDoTexto(textoObs, "VT");
+            if (vtExtraido) {
+                vtFixoEspecie = vtExtraido;
+                ehVtMensalEmEspecie = true;
+            }
         }
     }
 
-    // --- REGRA DE CORTE DO DIA 5 (MENSAL EM ESPÉCIE) ---
+    // Regra de Fechamento (Corte dia 5) para VT em dinheiro
     if (ehVtMensalEmEspecie && di) {
         df = new Date(di.getFullYear(), di.getMonth(), 5);
-        // Se a data de início inserida for depois do dia 5, o corte vai para o dia 5 do mês seguinte
         if (di > df) {
             df = new Date(di.getFullYear(), di.getMonth() + 1, 5);
         }
     }
 
-    // Executa a contagem de dias (usando a data final reajustada ou a padrão)
     const { diasTrabalhados, domingos } = calcularDiasEDomingos(di, df, escala);
     const passagens = getPassagensAtuais();
 
     dom.resDias.textContent = diasTrabalhados;
     dom.resDomingos.textContent = domingos;
 
-    // 2. EXIBIR VALOR DO VR (Fixo de 6 dias base)
-    const vrFinal = valorDiarioVR * 6;
-    dom.resVr.textContent = formatCurrency(vrFinal);
-
-    // 3. EXIBIR VALOR DO VT
+    // 2. EXIBIR VALOR DO VT
     if (diasTrabalhados > 0 && (passagens.length > 0 || vtFixoEspecie)) {
         const vtData = calcularVT(diasTrabalhados, domingos, passagens, periodo, vtFixoEspecie);
         dom.resVt.textContent = formatCurrency(vtData.vtFinal);
@@ -124,7 +116,7 @@ function updateApp() {
 
 function renderLog(dias, domingos, escala, periodo, vtData, passagens, dataFechamentoUtilizada) {
     if (dias === 0) {
-        dom.logCalculo.textContent = "Selecione um intervalo de datas válido para iniciar o cálculo.";
+        dom.logCalculo.textContent = "Selecione as datas e certifique-se de carregar sua planilha.";
         return;
     }
 
@@ -147,7 +139,6 @@ function addPassagem() {
     dom.passagensContainer.appendChild(card);
 }
 
-// Vinculando eventos
 dom.dataInicio.addEventListener('change', updateApp);
 dom.dataFechamento.addEventListener('change', updateApp);
 dom.escala.addEventListener('change', updateApp);
@@ -161,5 +152,4 @@ if(dom.uploadExcel) {
 }
 if(dom.codigoPosto) dom.codigoPosto.addEventListener('input', updateApp);
 
-// Inicializa a primeira caixinha de passagens vazia
 addPassagem();
