@@ -5,6 +5,8 @@ import { calcularVT } from './vt.js';
 import { createPassagemCard } from './ui.js';
 
 let passagemCount = 0;
+// Array bruto para armazenar as linhas de todas as abas da planilha carregada
+let dadosPlanilhaRaw = [];
 
 const dom = {
     dataInicio: document.getElementById('data-inicio'),
@@ -16,7 +18,12 @@ const dom = {
     resDias: document.getElementById('res-dias'),
     resDomingos: document.getElementById('res-domingos'),
     resVt: document.getElementById('res-vt'),
-    logCalculo: document.getElementById('log-calculo')
+    logCalculo: document.getElementById('log-calculo'),
+    // Elementos do Excel / Posto
+    alertaParticularidade: document.getElementById('alerta-particularidade'),
+    codigoPosto: document.getElementById('codigo-posto'),
+    uploadExcel: document.getElementById('upload-excel'),
+    btnVerificarPosto: document.getElementById('btn-verificar-posto')
 };
 
 function getPeriodo() {
@@ -75,7 +82,113 @@ function renderLog(dias, domingos, escala, periodo, vtData, passagens) {
     dom.logCalculo.textContent = log;
 }
 
+// Nova função isolada para verificar e exibir as particularidades
+function verificarPosto(silencioso = false) {
+    if (!dom.alertaParticularidade) return;
+
+    const codigoInput = dom.codigoPosto ? dom.codigoPosto.value.trim() : '';
+
+    if (!codigoInput) {
+        dom.alertaParticularidade.style.display = 'none';
+        dom.alertaParticularidade.innerHTML = '';
+        if (!silencioso) {
+            alert("Por favor, digite o código do posto para verificar.");
+        }
+        return;
+    }
+
+    if (dadosPlanilhaRaw.length === 0) {
+        dom.alertaParticularidade.style.display = 'none';
+        dom.alertaParticularidade.innerHTML = '';
+        if (!silencioso) {
+            alert("Por favor, faça a importação de uma planilha primeiro.");
+        }
+        return;
+    }
+
+    let foundParticularities = [];
+    let currentSection = "";
+
+    // Leitura bruta linha por linha para contornar qualquer variação de layout ou cabeçalho
+    for (let i = 0; i < dadosPlanilhaRaw.length; i++) {
+        const row = dadosPlanilhaRaw[i];
+        if (!row || row.length === 0) continue;
+
+        const col0 = String(row[0] || '').trim().toUpperCase();
+
+        // Identifica as sessões da planilha e as rastreia dinamicamente
+        if (col0.includes('CONVÊNIO') || col0.includes('CONVENIO')) {
+            currentSection = "CONVÊNIO";
+            continue;
+        }
+        if (col0.includes('VALE TRANSPORTE') || col0.includes('VALE_TRANSPORTE') || col0.includes('VALE-TRANSPORTE')) {
+            currentSection = "VALE TRANSPORTE";
+            continue;
+        }
+
+        // Ignora cabeçalhos internos de colunas
+        if (col0 === 'POSTO') {
+            continue;
+        }
+
+        // Se bater com o número do posto digitado
+        const targetPostoStr = String(codigoInput).trim();
+        if (col0 === targetPostoStr) {
+            const cliente = row[1] ? String(row[1]).trim() : '';
+            const particularidade = row[2] ? String(row[2]).trim() : '';
+
+            if (particularidade) {
+                foundParticularities.push({
+                    secao: currentSection || "Geral",
+                    cliente: cliente,
+                    texto: particularidade
+                });
+            }
+        }
+    }
+
+    // Exibe os alertas correspondentes de forma personalizada
+    if (foundParticularities.length > 0) {
+        dom.alertaParticularidade.style.backgroundColor = '#FFF9E6';
+        dom.alertaParticularidade.style.borderLeftColor = '#D97706';
+        dom.alertaParticularidade.style.color = '#B45309';
+
+        let html = `<div class="alerta-titulo">⚠️ Particularidades Encontradas para o Posto ${codigoInput}:</div>`;
+        foundParticularities.forEach(item => {
+            const badgeClass = item.secao === 'CONVÊNIO' ? 'badge-convenio' : (item.secao === 'VALE TRANSPORTE' ? 'badge-vt' : 'badge-geral');
+            html += `
+                <div class="alerta-item">
+                    <span class="badge-secao ${badgeClass}">${item.secao}</span>
+                    <strong>Cliente:</strong> ${item.cliente || 'Não informado'}<br>
+                    <strong>Particularidade:</strong> ${item.texto}
+                </div>
+            `;
+        });
+        dom.alertaParticularidade.innerHTML = html;
+        dom.alertaParticularidade.style.display = 'block';
+    } else {
+        if (silencioso) {
+            dom.alertaParticularidade.style.display = 'none';
+            dom.alertaParticularidade.innerHTML = '';
+        } else {
+            // Mostra um aviso informativo cinza caso a consulta ocorra mas não ache nada
+            dom.alertaParticularidade.style.backgroundColor = '#F3F4F6';
+            dom.alertaParticularidade.style.borderLeftColor = '#9CA3AF';
+            dom.alertaParticularidade.style.color = '#1F2937';
+            dom.alertaParticularidade.innerHTML = `
+                <div class="alerta-titulo" style="color: #4B5563;">ℹ️ Consulta de Posto</div>
+                <div style="color: #4B5563;">Nenhuma particularidade encontrada na planilha para o posto <strong>${codigoInput}</strong>.</div>
+            `;
+            dom.alertaParticularidade.style.display = 'block';
+        }
+    }
+}
+
 function updateApp() {
+    // Mantém a busca de posto atualizada silenciosamente quando dados da escala mudarem
+    verificarPosto(true);
+
+    // SEU CÓDIGO DE CÁLCULO ORIGINAL (100% PRESERVADO)
     const di = parseDateLocal(dom.dataInicio.value);
     const df = parseDateLocal(dom.dataFechamento.value);
     const escala = dom.escala.value;
@@ -108,5 +221,49 @@ dom.dataFechamento.addEventListener('change', updateApp);
 dom.escala.addEventListener('change', updateApp);
 dom.radiosPeriodo.forEach(r => r.addEventListener('change', updateApp));
 dom.btnAddPassagem.addEventListener('click', addPassagem);
+
+// Eventos Relacionados à Planilha e Verificação do Posto
+if (dom.uploadExcel) {
+    dom.uploadExcel.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    const data = new Uint8Array(event.target.result);
+                    const workbook = window.XLSX.read(data, { type: 'array' });
+                    
+                    dadosPlanilhaRaw = [];
+                    workbook.SheetNames.forEach(sheetName => {
+                        const worksheet = workbook.Sheets[sheetName];
+                        // Carrega todas as células como uma matriz bruta de strings/números
+                        const rows = window.XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                        dadosPlanilhaRaw.push(...rows);
+                    });
+
+                    alert("Planilha importada com sucesso! Digite um posto e clique em 'Verificar'.");
+                    verificarPosto(true);
+                } catch (err) {
+                    console.error("Erro ao ler arquivo de planilha:", err);
+                    alert("Erro ao ler a planilha. Certifique-se de carregar um arquivo .xlsx ou .csv válido.");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+    });
+}
+
+if (dom.btnVerificarPosto) {
+    dom.btnVerificarPosto.addEventListener('click', () => verificarPosto(false));
+}
+
+if (dom.codigoPosto) {
+    dom.codigoPosto.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            verificarPosto(false);
+        }
+    });
+}
 
 addPassagem();

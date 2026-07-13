@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Prepax Hagana - Calculadora de VT</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -48,6 +49,22 @@
                 </div>
 
                 <hr>
+                <h2>Particularidades do Posto</h2>
+                <div class="form-row" style="align-items: flex-end;">
+                    <div class="form-group">
+                        <label for="upload-excel">Importar Planilha (.xlsx, .xls, .csv)</label>
+                        <input type="file" id="upload-excel" accept=".xlsx, .xls, .csv">
+                    </div>
+                    <div class="form-group">
+                        <label for="codigo-posto">Código do Posto</label>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <input type="text" id="codigo-posto" placeholder="Ex: 8316" style="flex: 1;">
+                            <button type="button" id="btn-verificar-posto" class="btn btn-verificar">Verificar</button>
+                        </div>
+                    </div>
+                </div>
+
+                <hr>
 
                 <h2>Passagens</h2>
                 <div id="passagens-container"></div>
@@ -71,6 +88,8 @@
                     <strong id="res-vt">R$ 0,00</strong>
                 </div>
             </div>
+
+            <div id="alerta-particularidade" class="alerta-box" style="display: none;"></div>
 
             <div class="explicacao">
                 <h3>Como este valor foi calculado</h3>
