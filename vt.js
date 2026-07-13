@@ -1,27 +1,11 @@
 import { formatCurrency } from './utils.js';
 
-export function calcularVT(dias, domingos, passagens, periodo, vtEmEspecie = null) {
+export function calcularVT(dias, domingos, passagens, periodo) {
     let valorIda = 0;
     let valorIdaEVolta = 0;
     let custoDomingo = 0; 
     let logLines = [];
-    let vtFinal = 0;
-    const diasSemDomingo = dias - domingos;
 
-    // --- SE FOR DETECTADO VT EM ESPÉCIE/DINHEIRO NA PLANILHA ---
-    if (vtEmEspecie && vtEmEspecie > 0) {
-        vtFinal = vtEmEspecie * dias;
-        return {
-            valorIda: vtEmEspecie / 2,
-            valorIdaEVolta: vtEmEspecie,
-            custoDomingo: vtEmEspecie,
-            vtFinal,
-            logLines: [`- Regulamento de Planilha: VT em Espécie/Dinheiro fixado em ${formatCurrency(vtEmEspecie)} por dia trabalhado.`],
-            diasSemDomingo: dias
-        };
-    }
-
-    // --- CÁLCULO PADRÃO (CARTÕES / BILHETES) ---
     passagens.forEach(p => {
         valorIda += p.valor;
         const idaVolta = p.valor * 2;
@@ -53,9 +37,10 @@ export function calcularVT(dias, domingos, passagens, periodo, vtEmEspecie = nul
         custoDomingo += valorDiaDomingo;
     });
 
+    const diasSemDomingo = dias - domingos;
     const custoDiasNormais = valorIdaEVolta * diasSemDomingo;
     const custoTotalDomingos = custoDomingo * domingos;
-    vtFinal = custoDiasNormais + custoTotalDomingos;
+    const vtFinal = custoDiasNormais + custoTotalDomingos;
 
     return {
         valorIda,
